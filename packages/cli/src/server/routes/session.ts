@@ -4,9 +4,11 @@ import { LRUCache } from 'lru-cache';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { Agent } from '../../agent/Agent.js';
+import { SessionRuntime } from '../../agent/runtime/SessionRuntime.js';
 import type { ChatContext, LoopOptions } from '../../agent/types.js';
 import { PermissionMode } from '../../config/types.js';
 import { createLogger, LogCategory } from '../../logging/Logger.js';
+import { McpRegistry } from '../../mcp/McpRegistry.js';
 import type { Message } from '../../services/ChatServiceInterface.js';
 import { SessionService } from '../../services/SessionService.js';
 import type { ConfirmationDetails, ConfirmationResponse } from '../../tools/types/ExecutionTypes.js';
@@ -91,6 +93,7 @@ const sanitizeToolMetadata = (metadata: ToolResultMetadata | undefined) => {
 
 export const SessionRoutes = () => {
   const app = new Hono<{ Variables: Variables }>();
+  const runtimes = new Map<string, SessionRuntime>();
 
   app.get('/', async (c) => {
     try {
@@ -260,6 +263,14 @@ export const SessionRoutes = () => {
       logger.warn('[SessionRoutes] Failed to delete session file:', error);
     }
     sessions.delete(sessionId);
+    const runtime = runtimes.get(sessionId);
+    if (runtime) {
+      await runtime.dispose();
+      runtimes.delete(sessionId);
+      if (runtimes.size === 0) {
+        await McpRegistry.getInstance().disconnectAll();
+      }
+    }
 
     return c.json({ success: true });
   });
@@ -366,7 +377,7 @@ export const SessionRoutes = () => {
     activeRuns.set(runId, run);
     session.currentRunId = runId;
 
-    executeRunAsync(run, session, content, permissionMode).catch((error) => {
+    executeRunAsync(run, session, content, permissionMode, runtimes).catch((error) => {
       logger.error(`[SessionRoutes] Run ${runId} failed:`, error);
     });
 
@@ -412,7 +423,8 @@ async function executeRunAsync(
   run: RunState,
   session: SessionInfo,
   content: string,
-  permissionMode: PermissionMode
+  permissionMode: PermissionMode,
+  runtimes: Map<string, SessionRuntime>
 ): Promise<void> {
   const { abortController, sessionId, id: runId } = run;
   const userMessageId = nanoid(12);
@@ -427,7 +439,12 @@ async function executeRunAsync(
     emit('session.status', { status: 'running' });
     emit('message.created', { messageId: assistantMessageId, role: 'assistant', content: '' });
 
-    const agent = await Agent.create({});
+    let runtime = runtimes.get(sessionId);
+    if (!runtime) {
+      runtime = await SessionRuntime.create({ sessionId });
+      runtimes.set(sessionId, runtime);
+    }
+    const agent = await Agent.createWithRuntime(runtime, { sessionId });
 
     const requestConfirmation = async (details: ConfirmationDetails): Promise<ConfirmationResponse> => {
       const permissionId = nanoid(12);

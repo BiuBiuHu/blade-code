@@ -7,9 +7,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message } from '../../../../src/services/ChatServiceInterface.js';
 
+const runtimeState = vi.hoisted(() => ({
+  runtime: {
+    sessionId: 'session_test-uuid-1234',
+    dispose: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 // Mock 所有依赖
 vi.mock('../../../../src/agent/subagents/AgentSessionStore.js');
-vi.mock('../../../../src/agent/Agent.js');
+vi.mock('../../../../src/agent/Agent.js', () => ({
+  Agent: {
+    create: vi.fn(),
+    createWithRuntime: vi.fn(),
+  },
+}));
+vi.mock('../../../../src/agent/runtime/SessionRuntime.js', () => ({
+  SessionRuntime: {
+    create: vi.fn(async () => runtimeState.runtime),
+  },
+}));
 vi.mock('../../../../src/logging/Logger.js', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -24,6 +41,7 @@ vi.mock('nanoid', () => ({
 }));
 
 import { Agent } from '../../../../src/agent/Agent.js';
+import { SessionRuntime } from '../../../../src/agent/runtime/SessionRuntime.js';
 import { AgentSessionStore } from '../../../../src/agent/subagents/AgentSessionStore.js';
 import { BackgroundAgentManager } from '../../../../src/agent/subagents/BackgroundAgentManager.js';
 
@@ -54,7 +72,7 @@ describe('BackgroundAgentManager', () => {
         metadata: { tokensUsed: 100, toolCallsCount: 5 },
       }),
     };
-    vi.mocked(Agent.create).mockResolvedValue(mockAgent as any);
+    vi.mocked(Agent.createWithRuntime).mockResolvedValue(mockAgent as any);
 
     manager = BackgroundAgentManager.getInstance();
   });
@@ -73,6 +91,32 @@ describe('BackgroundAgentManager', () => {
   });
 
   describe('startBackgroundAgent', () => {
+    it('应为后台 agent 创建独立 runtime', async () => {
+      manager.startBackgroundAgent({
+        config: {
+          name: 'Explore',
+          description: 'Explore agent',
+          systemPrompt: 'You are an explorer',
+        },
+        description: 'Test task',
+        prompt: 'Do something',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(SessionRuntime.create).toHaveBeenCalledWith({
+        sessionId: 'session_test-uuid-1234',
+        modelId: undefined,
+      });
+      expect(Agent.createWithRuntime).toHaveBeenCalledWith(
+        runtimeState.runtime,
+        expect.objectContaining({
+          sessionId: 'session_test-uuid-1234',
+          systemPrompt: 'You are an explorer',
+        })
+      );
+    });
+
     it('应启动后台 agent 并返回 ID', () => {
       const agentId = manager.startBackgroundAgent({
         config: {

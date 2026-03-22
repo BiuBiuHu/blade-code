@@ -281,6 +281,7 @@ export const useCommandHandler = (
   // 使用 Agent 管理 Hook
   // Agent 现在直接通过 vanilla store 更新 todos，不需要回调
   const { createAgent, cleanupAgent } = useAgent({
+    sessionId,
     systemPrompt: replaceSystemPrompt,
     appendSystemPrompt: appendSystemPrompt,
     maxTurns: maxTurns,

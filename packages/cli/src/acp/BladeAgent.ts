@@ -13,6 +13,7 @@ import {
 } from '@agentclientprotocol/sdk';
 import { nanoid } from 'nanoid';
 import { createLogger, LogCategory } from '../logging/Logger.js';
+import { McpRegistry } from '../mcp/McpRegistry.js';
 import { getConfig } from '../store/vanilla.js';
 import { AcpSession } from './Session.js';
 
@@ -217,5 +218,6 @@ export class BladeAgent implements AcpAgentInterface {
       await session.destroy();
     }
     this.sessions.clear();
+    await McpRegistry.getInstance().disconnectAll();
   }
 }

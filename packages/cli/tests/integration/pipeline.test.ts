@@ -90,6 +90,69 @@ describe('ExecutionPipeline 权限集成', () => {
     expect(confirmation).toHaveBeenCalledTimes(1);
   });
 
+  it('共享审批状态时应跨 turn 的 pipeline 复用 session 批准', async () => {
+    const registry = new ToolRegistry();
+    registry.register(createTestTool() as any);
+
+    const approvals = new Set<string>();
+    const approvalStore = {
+      has: vi.fn((signature: string) => approvals.has(signature)),
+      add: vi.fn((signature: string) => {
+        approvals.add(signature);
+      }),
+      clear: vi.fn(() => {
+        approvals.clear();
+      }),
+    };
+
+    const firstPipeline = new ExecutionPipeline(registry, {
+      permissionConfig: {
+        allow: [],
+        ask: ['TestTool'],
+        deny: [],
+      },
+      approvalStore,
+    });
+
+    const secondPipeline = new ExecutionPipeline(registry, {
+      permissionConfig: {
+        allow: [],
+        ask: ['TestTool'],
+        deny: [],
+      },
+      approvalStore,
+    });
+
+    const confirmation = vi.fn(async () => ({
+      approved: true,
+      scope: 'session' as const,
+    }));
+
+    const context: ExecutionContext = {
+      signal: new AbortController().signal,
+      confirmationHandler: {
+        requestConfirmation: confirmation,
+      },
+    };
+
+    const first = await firstPipeline.execute(
+      'TestTool',
+      { value: 'same' } as any,
+      context
+    );
+    const second = await secondPipeline.execute(
+      'TestTool',
+      { value: 'same' } as any,
+      context
+    );
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(approvalStore.has).toHaveBeenCalled();
+    expect(approvalStore.add).toHaveBeenCalledTimes(1);
+    expect(confirmation).toHaveBeenCalledTimes(1);
+  });
+
   it('DENY 规则应直接拒绝执行', async () => {
     const registry = new ToolRegistry();
     registry.register(createTestTool() as any);

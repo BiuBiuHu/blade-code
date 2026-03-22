@@ -7,6 +7,13 @@ import { AcpSession } from '../../../../src/acp/Session.js';
 import { createMockACPClient } from '../../../support/mocks/mockACPClient.js';
 import { createMockAgent } from '../../../support/mocks/mockAgent.js';
 
+const runtimeState = vi.hoisted(() => ({
+  runtime: {
+    sessionId: 'test-session-id',
+    dispose: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 // Mock Agent
 vi.mock('../../../../src/agent/Agent.js', () => {
   let mockAgentInstance: any = null;
@@ -26,6 +33,13 @@ vi.mock('../../../../src/agent/Agent.js', () => {
         mockAgentInstance = mockAgent;
         return mockAgent;
       }),
+      createWithRuntime: vi.fn().mockImplementation(async () => {
+        const mockAgent = createMockAgent();
+        mockAgent.chat = vi.fn().mockResolvedValue('Mock response');
+        mockAgent.destroy = vi.fn().mockResolvedValue(undefined);
+        mockAgentInstance = mockAgent;
+        return mockAgent;
+      }),
     }
   );
 
@@ -34,6 +48,12 @@ vi.mock('../../../../src/agent/Agent.js', () => {
     _getMockAgentInstance: () => mockAgentInstance,
   };
 });
+
+vi.mock('../../../../src/agent/runtime/SessionRuntime.js', () => ({
+  SessionRuntime: {
+    create: vi.fn(async () => runtimeState.runtime),
+  },
+}));
 
 // Mock AcpServiceContext
 vi.mock('../../../../src/acp/AcpServiceContext.js', () => ({
@@ -90,6 +110,7 @@ describe('AcpSession', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    runtimeState.runtime.dispose.mockClear();
   });
 
   describe('initialize', () => {
@@ -106,12 +127,15 @@ describe('AcpSession', () => {
       );
     });
 
-    it('应该创建 Agent 实例', async () => {
+    it('应该创建 SessionRuntime 并注入 Agent 实例', async () => {
       await session.initialize();
 
-      // 简单验证 initialize 方法不抛出错误
-      // Agent 实例的创建在 mock 中完成
-      expect(true).toBe(true);
+      const { SessionRuntime } = await import('../../../../src/agent/runtime/SessionRuntime.js');
+      const { Agent } = await import('../../../../src/agent/Agent.js');
+      expect(SessionRuntime.create).toHaveBeenCalledWith({ sessionId: 'test-session-id' });
+      expect(Agent.createWithRuntime).toHaveBeenCalledWith(runtimeState.runtime, {
+        sessionId: 'test-session-id',
+      });
     });
   });
 
@@ -289,6 +313,7 @@ describe('AcpSession', () => {
       // 验证 ACP 服务上下文已销毁
       const { AcpServiceContext } = await import('../../../../src/acp/AcpServiceContext.js');
       expect(AcpServiceContext.destroySession).toHaveBeenCalledWith('test-session-id');
+      expect(runtimeState.runtime.dispose).toHaveBeenCalledTimes(1);
     });
 
     it('应该取消挂起的提示', async () => {

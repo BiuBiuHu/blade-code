@@ -51,6 +51,7 @@ export interface ChatContext {
  * Agent 的配置来自 Store (通过 getConfig() 获取 BladeConfig)
  */
 export interface AgentOptions {
+  sessionId?: string;
   // 运行时参数
   systemPrompt?: string; // 完全替换系统提示
   appendSystemPrompt?: string; // 追加系统提示

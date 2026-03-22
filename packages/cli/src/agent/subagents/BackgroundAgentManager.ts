@@ -12,6 +12,7 @@ import type { PermissionMode } from '../../config/types.js';
 import { createLogger, LogCategory } from '../../logging/Logger.js';
 import type { Message } from '../../services/ChatServiceInterface.js';
 import { Agent } from '../Agent.js';
+import { SessionRuntime } from '../runtime/SessionRuntime.js';
 import {
   type AgentSession,
   type AgentSessionStatus,
@@ -192,6 +193,7 @@ export class BackgroundAgentManager {
     existingMessages?: Message[]
   ): Promise<SubagentResult> {
     const startTime = Date.now();
+    let runtime: SessionRuntime | undefined;
 
     try {
       if (signal.aborted) {
@@ -201,7 +203,12 @@ export class BackgroundAgentManager {
       const systemPrompt = config.systemPrompt || '';
       const modelId =
         config.model && config.model !== 'inherit' ? config.model : undefined;
-      const agent = await Agent.create({
+      runtime = await SessionRuntime.create({
+        sessionId: agentId,
+        modelId,
+      });
+      const agent = await Agent.createWithRuntime(runtime, {
+        sessionId: agentId,
         systemPrompt,
         toolWhitelist: config.tools,
         modelId,
@@ -283,6 +290,8 @@ export class BackgroundAgentManager {
         error: errorMessage,
         stats: { duration },
       };
+    } finally {
+      await runtime?.dispose();
     }
   }
 
