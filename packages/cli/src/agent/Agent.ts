@@ -71,6 +71,7 @@ import { type Tool, ToolErrorType, type ToolResult } from '../tools/types/index.
 import { getEnvironmentContext } from '../utils/environment.js';
 import { isThinkingModel } from '../utils/modelDetection.js';
 import { ExecutionEngine } from './ExecutionEngine.js';
+import { SessionRuntime } from './runtime/SessionRuntime.js';
 import { subagentRegistry } from './subagents/SubagentRegistry.js';
 import type {
   AgentOptions,
@@ -115,15 +116,18 @@ export class Agent {
   // 当前模型的上下文窗口大小（用于 tokenUsage 上报）
   private currentModelMaxContextTokens!: number;
   private currentModelId?: string;
+  private sessionRuntime?: SessionRuntime;
 
   constructor(
     config: BladeConfig,
     runtimeOptions: AgentOptions = {},
-    executionPipeline?: ExecutionPipeline
+    executionPipeline?: ExecutionPipeline,
+    sessionRuntime?: SessionRuntime
   ) {
     this.config = config;
     this.runtimeOptions = runtimeOptions;
     this.executionPipeline = executionPipeline || this.createDefaultPipeline();
+    this.sessionRuntime = sessionRuntime;
     // sessionId 不再存储在 Agent 内部，改为从 context 传入
   }
 
@@ -190,6 +194,11 @@ export class Agent {
   }
 
   private async switchModelIfNeeded(modelId: string): Promise<void> {
+    if (this.sessionRuntime) {
+      await this.sessionRuntime.refresh({ modelId });
+      this.syncRuntimeState();
+      return;
+    }
     if (!modelId || modelId === this.currentModelId) return;
     const modelConfig = getModelById(modelId);
     if (!modelConfig) {
@@ -204,6 +213,12 @@ export class Agent {
    * 使用 Store 获取配置
    */
   static async create(options: AgentOptions = {}): Promise<Agent> {
+    if (options.sessionId) {
+      throw new Error(
+        'Agent.create() does not accept sessionId. Create a SessionRuntime explicitly and use Agent.createWithRuntime().'
+      );
+    }
+
     // 0. 确保 store 已初始化（防御性检查）
     await ensureStoreInitialized();
 
@@ -242,6 +257,20 @@ export class Agent {
     return agent;
   }
 
+  static async createWithRuntime(
+    runtime: SessionRuntime,
+    options: AgentOptions = {}
+  ): Promise<Agent> {
+    const agent = new Agent(
+      runtime.getConfig(),
+      options,
+      runtime.createExecutionPipeline(options),
+      runtime
+    );
+    await agent.initialize();
+    return agent;
+  }
+
   /**
    * 初始化Agent
    */
@@ -252,6 +281,17 @@ export class Agent {
 
     try {
       this.log('初始化Agent...');
+
+      if (this.sessionRuntime) {
+        await this.initializeSystemPrompt();
+        await this.sessionRuntime.refresh(this.runtimeOptions);
+        this.syncRuntimeState();
+        this.isInitialized = true;
+        this.log(
+          `Agent初始化完成，已加载 ${this.executionPipeline.getRegistry().getAll().length} 个工具`
+        );
+        return;
+      }
 
       // 1. 初始化系统提示
       await this.initializeSystemPrompt();
@@ -1901,6 +1941,19 @@ IMPORTANT: Execute according to the approved plan above. Follow the steps exactl
       this.error('Agent销毁失败', error);
       throw error;
     }
+  }
+
+  private syncRuntimeState(): void {
+    if (!this.sessionRuntime) {
+      return;
+    }
+
+    this.chatService = this.sessionRuntime.getChatService();
+    this.executionEngine = this.sessionRuntime.getExecutionEngine();
+    this.attachmentCollector = this.sessionRuntime.getAttachmentCollector();
+    this.currentModelId = this.sessionRuntime.getCurrentModelId();
+    this.currentModelMaxContextTokens =
+      this.sessionRuntime.getCurrentModelMaxContextTokens();
   }
 
   /**

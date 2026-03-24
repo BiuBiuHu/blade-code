@@ -15,6 +15,10 @@ import type {
 import { ToolErrorType } from '../types/ToolTypes.js';
 import { FileLockManager } from './FileLockManager.js';
 import {
+  InMemorySessionApprovalStore,
+  type SessionApprovalStore,
+} from './SessionApprovalStore.js';
+import {
   ConfirmationStage,
   DiscoveryStage,
   ExecutionStage,
@@ -30,7 +34,7 @@ export class ExecutionPipeline extends EventEmitter {
   private stages: PipelineStage[];
   private executionHistory: ExecutionHistoryEntry[] = [];
   private readonly maxHistorySize: number;
-  private readonly sessionApprovals = new Set<string>();
+  private readonly sessionApprovals: SessionApprovalStore;
 
   constructor(
     private registry: ToolRegistry,
@@ -39,6 +43,7 @@ export class ExecutionPipeline extends EventEmitter {
     super();
 
     this.maxHistorySize = config.maxHistorySize || 1000;
+    this.sessionApprovals = config.approvalStore || new InMemorySessionApprovalStore();
 
     // 使用提供的权限配置或默认配置
     const permissionConfig: PermissionConfig = config.permissionConfig || {
@@ -435,6 +440,7 @@ export interface ExecutionPipelineConfig {
   customStages?: PipelineStage[];
   permissionConfig?: PermissionConfig;
   permissionMode?: PermissionMode;
+  approvalStore?: SessionApprovalStore;
 }
 
 /**

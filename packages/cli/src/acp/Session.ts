@@ -22,6 +22,7 @@ import type {
 } from '@agentclientprotocol/sdk';
 import { nanoid } from 'nanoid';
 import { Agent } from '../agent/Agent.js';
+import { SessionRuntime } from '../agent/runtime/SessionRuntime.js';
 import type { ChatContext, LoopOptions } from '../agent/types.js';
 import { PermissionMode } from '../config/types.js';
 import { createLogger, LogCategory } from '../logging/Logger.js';
@@ -53,6 +54,7 @@ type AcpModeId = 'default' | 'auto-edit' | 'yolo' | 'plan';
 
 export class AcpSession {
   private agent: Agent | null = null;
+  private runtime: SessionRuntime | null = null;
   private pendingPrompt: AbortController | null = null;
   private messages: Message[] = [];
   private mode: AcpModeId = 'default';
@@ -82,8 +84,8 @@ export class AcpSession {
     );
     logger.debug(`[AcpSession ${this.id}] ACP service context initialized`);
 
-    // 创建 Agent（cwd 通过 ChatContext.workspaceRoot 传递，不修改全局工作目录）
-    this.agent = await Agent.create({});
+    this.runtime = await SessionRuntime.create({ sessionId: this.id });
+    this.agent = await Agent.createWithRuntime(this.runtime, { sessionId: this.id });
 
     logger.debug(`[AcpSession ${this.id}] Agent created successfully`);
     // 注意：available_commands_update 在 BladeAgent.newSession 响应后延迟发送
@@ -540,6 +542,10 @@ export class AcpSession {
     if (this.agent) {
       await this.agent.destroy();
       this.agent = null;
+    }
+    if (this.runtime) {
+      await this.runtime.dispose();
+      this.runtime = null;
     }
     // 销毁此会话的 ACP 服务（不影响其他会话）
     AcpServiceContext.destroySession(this.id);

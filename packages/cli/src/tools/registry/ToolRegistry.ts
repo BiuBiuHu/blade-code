@@ -277,6 +277,20 @@ export class ToolRegistry extends EventEmitter {
   }
 
   /**
+   * 克隆注册表（共享工具实例，但隔离注册表状态）
+   */
+  clone(): ToolRegistry {
+    const cloned = new ToolRegistry();
+    for (const tool of this.tools.values()) {
+      cloned.register(tool);
+    }
+    for (const tool of this.mcpTools.values()) {
+      cloned.registerMcpTool(tool);
+    }
+    return cloned;
+  }
+
+  /**
    * 注册MCP工具
    */
   registerMcpTool(tool: Tool): void {

@@ -10,6 +10,7 @@ import { HookManager } from '../../hooks/HookManager.js';
 import { createLogger, LogCategory } from '../../logging/Logger.js';
 import { configActions, getConfig } from '../../store/vanilla.js';
 import type { ToolRegistry } from '../registry/ToolRegistry.js';
+import type { SessionApprovalStore } from './SessionApprovalStore.js';
 import type { PipelineStage, ToolExecution } from '../types/index.js';
 import { isReadOnlyKind, ToolKind } from '../types/index.js';
 import {
@@ -50,14 +51,14 @@ export class DiscoveryStage implements PipelineStage {
 export class PermissionStage implements PipelineStage {
   readonly name = 'permission';
   private permissionChecker: PermissionChecker;
-  private readonly sessionApprovals: Set<string>;
+  private readonly sessionApprovals: SessionApprovalStore;
   // 🔧 重命名为 defaultPermissionMode，作为回退值
   // 实际权限检查时优先使用 execution.context.permissionMode（动态值）
   private readonly defaultPermissionMode: PermissionMode;
 
   constructor(
     permissionConfig: PermissionConfig,
-    sessionApprovals: Set<string>,
+    sessionApprovals: SessionApprovalStore,
     permissionMode: PermissionMode
   ) {
     this.permissionChecker = new PermissionChecker(permissionConfig);
@@ -306,7 +307,7 @@ export class ConfirmationStage implements PipelineStage {
   private permissionChecker: PermissionChecker;
 
   constructor(
-    private readonly sessionApprovals: Set<string>,
+    private readonly sessionApprovals: SessionApprovalStore,
     permissionChecker: PermissionChecker
   ) {
     this.permissionChecker = permissionChecker;
