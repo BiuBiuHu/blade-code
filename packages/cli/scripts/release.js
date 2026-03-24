@@ -461,7 +461,7 @@ function publishToNpm() {
     console.log(chalk.yellow('   npm login --registry https://registry.npmjs.org/'));
     console.log(chalk.yellow('   npm publish --access public --registry https://registry.npmjs.org/'));
     
-    // 不抛出错误，让后续的git推送仍能执行
+    throw new Error(`npm publish failed: ${error.message}`);
   }
 }
 
