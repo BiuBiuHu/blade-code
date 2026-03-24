@@ -1,5 +1,11 @@
 import type { Message as RawMessage } from '@/services'
 import type { AgentResponseContent, Message, SubagentProgress, ToolCallInfo } from '../types'
+import {
+  makeSubagentId,
+  makeToolCallId,
+  normalizeSubagentStatus,
+  normalizeToolArguments,
+} from './messageIdentity'
 
 const createEmptyAgentContent = (): AgentResponseContent => ({
   textBefore: '',
@@ -12,20 +18,31 @@ const createEmptyAgentContent = (): AgentResponseContent => ({
   question: null,
 })
 
-const parseSubtaskRef = (metadata: Record<string, unknown> | undefined): SubagentProgress | null => {
+const parseSubtaskRef = (
+  messageId: string,
+  metadata: Record<string, unknown> | undefined
+): SubagentProgress | null => {
   if (!metadata || typeof metadata !== 'object' || !('subtaskRef' in metadata)) {
     return null
   }
   const ref = metadata.subtaskRef as Record<string, unknown>
   if (!ref || typeof ref !== 'object') return null
 
-  const status = ref.status === 'completed' ? 'completed' : ref.status === 'failed' ? 'failed' : 'completed'
-  
   return {
-    id: (ref.childSessionId as string) || `subagent-${Date.now()}`,
+    id: makeSubagentId({
+      explicitId:
+        typeof ref.subagentId === 'string'
+          ? ref.subagentId
+          : undefined,
+      sessionId: ref.childSessionId as string | undefined,
+      messageId,
+      agentType: ref.agentType as string | undefined,
+      description: ref.description as string | undefined,
+      summary: ref.summary as string | undefined,
+    }),
     type: (ref.agentType as string) || 'subagent',
     description: (ref.description as string) || (ref.summary as string) || '',
-    status,
+    status: normalizeSubagentStatus(ref.status),
     startTime: Date.now(),
     sessionId: ref.childSessionId as string | undefined,
   }
@@ -59,17 +76,22 @@ export function aggregateMessages(rawMessages: RawMessage[]): Message[] {
         agentContent.thinkingContent = raw.thinkingContent
       }
       
-      agentContent.subagent = parseSubtaskRef(metadata)
+      agentContent.subagent = parseSubtaskRef(raw.id, metadata)
       
       if (raw.tool_calls && Array.isArray(raw.tool_calls)) {
         for (const tc of raw.tool_calls) {
+          const toolName = tc.function?.name || 'Unknown'
+          const argumentsText = normalizeToolArguments(tc.function?.arguments)
           const toolCall: ToolCallInfo = {
-            toolCallId: tc.id || `tool-${Date.now()}`,
-            toolName: tc.function?.name || 'Unknown',
-            arguments: typeof tc.function?.arguments === 'string' 
-              ? tc.function.arguments 
-              : JSON.stringify(tc.function?.arguments || {}),
-            status: 'success',
+            toolCallId: makeToolCallId({
+              explicitId: tc.id,
+              messageId: raw.id,
+              toolName,
+              argumentsValue: tc.function?.arguments,
+            }),
+            toolName,
+            arguments: argumentsText,
+            status: 'running',
             startTime: Date.now(),
           }
           agentContent.toolCalls.push(toolCall)
@@ -103,7 +125,12 @@ export function aggregateMessages(rawMessages: RawMessage[]): Message[] {
           }
         } else {
           currentAssistant.agentContent.toolCalls.push({
-            toolCallId: toolCallId || `tool-${Date.now()}-${Math.random()}`,
+            toolCallId: makeToolCallId({
+              explicitId: toolCallId,
+              messageId: currentAssistant.id,
+              toolName,
+              output: raw.content,
+            }),
             toolName,
             output: raw.content,
             status: 'success',

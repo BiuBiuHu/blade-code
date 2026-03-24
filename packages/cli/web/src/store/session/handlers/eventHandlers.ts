@@ -7,6 +7,7 @@ import type {
   TodoItem,
   ToolCallInfo,
 } from '../types'
+import { makeSubagentId, makeToolCallId } from '../utils/messageIdentity'
 
 type GetState = () => SessionStoreState
 type SetState = {
@@ -191,7 +192,13 @@ const handleToolStart: EventHandler = (props, get, set) => {
 
   if (subagentType) {
     setSubagent(targetMessageId, {
-      id: (props.toolCallId as string) || `subagent-${Date.now()}`,
+      id: makeSubagentId({
+        explicitId: props.toolCallId as string | undefined,
+        sessionId: subagentSessionId,
+        messageId: targetMessageId,
+        agentType: subagentType,
+        description,
+      }),
       type: subagentType,
       description,
       status: 'running',
@@ -204,7 +211,13 @@ const handleToolStart: EventHandler = (props, get, set) => {
   }
 
   const toolCall: ToolCallInfo = {
-    toolCallId: (props.toolCallId as string) || `tool-${Date.now()}`,
+    toolCallId: makeToolCallId({
+      explicitId: props.toolCallId as string | undefined,
+      messageId: targetMessageId,
+      toolName,
+      argumentsValue: args,
+      toolKind: props.toolKind as string | undefined,
+    }),
     toolName,
     arguments: args,
     toolKind: props.toolKind as string,
@@ -354,7 +367,13 @@ const handleSubagentStart: EventHandler = (props, get) => {
   if (!currentAssistantMessageId) return
 
   const subagent: SubagentProgress = {
-    id: (props.subagentId as string) || `subagent-${Date.now()}`,
+    id: makeSubagentId({
+      explicitId: props.subagentId as string | undefined,
+      sessionId: props.subagentSessionId as string | undefined,
+      messageId: currentAssistantMessageId,
+      agentType: props.type as string | undefined,
+      description: props.description as string | undefined,
+    }),
     type: (props.type as string) || 'unknown',
     description: (props.description as string) || '',
     status: 'running',
