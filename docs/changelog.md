@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.2.7] - 2026-03-24
+
+### ✨ 新功能
+
+- 添加无头模式支持并实现结构化事件流输出 (bd7089e)
+- 引入会话运行时管理以支持会话级资源隔离 (5d30dac)
+- add native openai provider support (523633b)
+- add native openai provider support (5cd1734)
+
+
 ## [0.2.6] - 2026-02-21
 
 ### ✨ 新功能
