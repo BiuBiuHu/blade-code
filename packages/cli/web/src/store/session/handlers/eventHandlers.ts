@@ -158,7 +158,9 @@ const handleThinkingDelta: EventHandler = (props, get) => {
   appendThinking(currentAssistantMessageId, props.delta as string)
 }
 
-const handleThinkingCompleted: EventHandler = () => {}
+const handleThinkingCompleted: EventHandler = () => {
+  // Thinking deltas are applied incrementally, so completion is a no-op here.
+}
 
 const handleToolStart: EventHandler = (props, get, set) => {
   const { currentSessionId, appendToolCall, setHasToolCalls, setSubagent } = get()

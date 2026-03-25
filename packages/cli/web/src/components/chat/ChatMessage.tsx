@@ -324,7 +324,7 @@ function ConfirmationSection({ confirmation, messageId }: { confirmation: AgentR
         ...confirmation,
         status: approved ? 'approved' : 'denied',
       })
-    } catch (error) {
+    } catch (_error) {
       setConfirmation(messageId, {
         ...confirmation,
         status: approved ? 'approved' : 'denied',

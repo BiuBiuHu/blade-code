@@ -1,4 +1,4 @@
-# Blade Code CI/CD Pipeline
+# Blade Code CI Pipeline
 name: CI/CD
 
 on:
@@ -7,258 +7,272 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  CI: true
+  NODE_ENV: test
+
 jobs:
-  test:
-    name: Test Suite (${{ matrix.node-version }})
+  quality-gate:
+    name: Quality Gate
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20.x]
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: latest
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
-    - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
+      - name: Verify Bun runtime
+        run: bun --version
 
-    - name: Install pnpm
-      run: npm install -g pnpm@9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
 
-    - name: Get pnpm store directory
-      shell: bash
-      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      - name: Install pnpm
+        run: npm install -g pnpm@9
 
-    - name: Setup pnpm cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-store-
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
-    - name: Build CLI package
-      run: pnpm build:cli
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Run unit tests
-      run: pnpm --filter blade-code test:unit
+      - name: Build CLI package
+        run: pnpm build:cli
 
-    - name: Run integration tests
-      run: pnpm --filter blade-code test:integration
+      - name: Run CLI type check
+        run: pnpm type-check
 
-    - name: Run CLI tests
-      run: pnpm --filter blade-code test:cli
+      - name: Run web type check
+        run: pnpm type-check:web
 
-    - name: Run type check
-      run: pnpm type-check
+      - name: Run web session lint
+        run: pnpm lint:web
 
-    - name: Build all packages
-      run: pnpm build
+      - name: Run web regression tests
+        run: pnpm test:web
 
-    - name: Test CLI build
-      run: pnpm --filter blade-code start -- --help
+      - name: Build all packages
+        run: pnpm build
+
+  core-headless-gate:
+    name: Headless Core Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Verify Bun runtime
+        run: bun --version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CLI package
+        run: pnpm build:cli
+
+      - name: Run headless core regression suite
+        run: pnpm test:headless-core
 
   coverage:
     name: Test Coverage
     runs-on: ubuntu-latest
-    needs: test
+    needs: [quality-gate, core-headless-gate]
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: latest
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
+      - name: Verify Bun runtime
+        run: bun --version
 
-    - name: Install pnpm
-      run: npm install -g pnpm@9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
 
-    - name: Get pnpm store directory
-      shell: bash
-      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      - name: Install pnpm
+        run: npm install -g pnpm@9
 
-    - name: Setup pnpm cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-store-
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
-    - name: Build CLI package
-      run: pnpm build:cli
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Run tests with coverage
-      run: pnpm --filter blade-code test:coverage
+      - name: Build CLI package
+        run: pnpm build:cli
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        files: ./packages/cli/coverage/lcov.info
-        flags: unittests
-        name: blade-cli-coverage
-        fail_ci_if_error: false
-        verbose: true
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Run tests with coverage
+        run: pnpm --filter blade-code test:coverage
 
-    - name: Upload coverage artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: packages/cli/coverage/
-        retention-days: 7
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./packages/cli/coverage/lcov.info
+          flags: unittests
+          name: blade-cli-coverage
+          fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: packages/cli/coverage/
+          retention-days: 7
 
   security-tests:
     name: Security Tests
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: latest
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
+      - name: Verify Bun runtime
+        run: bun --version
 
-    - name: Install pnpm
-      run: npm install -g pnpm@9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
 
-    - name: Get pnpm store directory
-      shell: bash
-      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      - name: Install pnpm
+        run: npm install -g pnpm@9
 
-    - name: Setup pnpm cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-store-
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
-    - name: Build CLI package
-      run: pnpm build:cli
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Run security tests
-      run: pnpm --filter blade-code test:security
+      - name: Build CLI package
+        run: pnpm build:cli
 
-    - name: Run npm audit
-      run: pnpm audit --audit-level=high || true
+      - name: Run security tests
+        run: pnpm --filter blade-code test:security
 
-  code-quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
+      - name: Run npm audit
+        run: pnpm audit --audit-level=high || true
 
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: latest
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-
-    - name: Install pnpm
-      run: npm install -g pnpm@9
-
-    - name: Get pnpm store directory
-      shell: bash
-      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-    - name: Setup pnpm cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-store-
-
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-
-    - name: Run linter and formatter
-      run: pnpm lint && pnpm format:check || echo "Lint warnings found (non-blocking)"
-
-  cross-platform:
-    name: Cross Platform (${{ matrix.os }})
+  cross-platform-smoke:
+    name: Cross Platform Smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [20.x]
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: latest
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
+      - name: Verify Bun runtime
+        run: bun --version
 
-    - name: Install pnpm
-      run: npm install -g pnpm@9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
 
-    - name: Get pnpm store directory
-      shell: bash
-      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      - name: Install pnpm
+        run: npm install -g pnpm@9
 
-    - name: Setup pnpm cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-store-
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
-    - name: Build all packages
-      run: pnpm build
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Test CLI basics
-      run: pnpm --filter blade-code start -- --help
+      - name: Build all packages
+        run: pnpm build
 
-env:
-  CI: true
-  NODE_ENV: test
+      - name: Test CLI help
+        run: pnpm --filter blade-code start -- --help
+
+      - name: Test headless help
+        run: pnpm --filter blade-code start -- --headless /help

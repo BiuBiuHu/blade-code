@@ -4,8 +4,9 @@
   "files": {
     "ignoreUnknown": false,
     "includes": [
-      "packages/*/src/**/*",
-      "packages/*/tests/**/*",
+      "packages/**/src/**/*",
+      "packages/**/tests/**/*",
+      "packages/**/vitest.config.ts",
       "*.ts",
       "*.tsx",
       "*.js",
@@ -89,6 +90,19 @@
       }
     }
   },
+  "css": {
+    "parser": {
+      "cssModules": false,
+      "allowWrongLineComments": false,
+      "tailwindDirectives": true
+    },
+    "linter": {
+      "enabled": true
+    },
+    "formatter": {
+      "enabled": true
+    }
+  },
   "javascript": {
     "formatter": {
       "quoteStyle": "single",
@@ -110,10 +124,10 @@
   "overrides": [
     {
       "includes": [
-        "packages/*/tests/**/*",
+        "packages/**/tests/**/*",
         "**/*.test.ts",
         "**/*.spec.ts",
-        "packages/*/src/**/*test*"
+        "packages/**/src/**/*test*"
       ],
       "linter": {
         "rules": {

@@ -23,6 +23,20 @@ const testTypes = {
     project: 'cli',
     timeout: 60000,
   },
+  headlessCore: {
+    name: 'Headless 核心回归测试',
+    project: null,
+    timeout: 120000,
+    files: [
+      'tests/unit/cli/headless.test.ts',
+      'tests/unit/cli/headless-events.test.ts',
+      'tests/integration/cli/blade-help.test.ts',
+      'tests/unit/agent-runtime/agent/session-runtime.test.ts',
+      'tests/unit/agent-runtime/agent/subagent-registry.test.ts',
+      'tests/unit/agent-runtime/server/session-routes.test.ts',
+      'tests/unit/agent-runtime/acp/session.test.ts',
+    ],
+  },
   e2e: {
     name: 'E2E 测试',
     project: 'e2e',
@@ -61,6 +75,7 @@ function printUsage() {
   unit        运行单元测试
   integration 运行集成测试
   cli         运行 CLI 行为测试
+  headlessCore 运行 headless 与核心 runtime 回归测试
   e2e         运行端到端测试
   performance 运行性能测试
   snapshot    运行快照测试
@@ -111,6 +126,10 @@ function runTest(testType, options = {}) {
 
   if (config.project) {
     baseArgs.push('--project', config.project);
+  }
+
+  if (config.files) {
+    baseArgs.push(...config.files.map(f => path.resolve(__dirname, '..', f)));
   }
 
   if (options.coverage) {

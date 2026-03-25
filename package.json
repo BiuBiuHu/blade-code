@@ -8,7 +8,7 @@
     "dev": "pnpm -r --parallel dev",
     "dev:cli": "pnpm --filter blade-code dev",
     "dev:web": "pnpm --filter blade-code dev:serve & VITE_API_TARGET=http://localhost:4097 pnpm -C packages/cli/web dev",
-    "build": "pnpm -r build",
+    "build": "pnpm build:cli && pnpm build:vscode",
     "build:cli": "pnpm --filter blade-code build",
     "build:vscode": "pnpm --filter blade-vscode build",
     "test": "pnpm --filter blade-code test",
@@ -16,15 +16,19 @@
     "test:unit": "pnpm --filter blade-code test:unit",
     "test:integration": "pnpm --filter blade-code test:integration",
     "test:cli": "pnpm --filter blade-code test:cli",
+    "test:web": "pnpm --filter blade-web test",
+    "test:headless-core": "pnpm --filter blade-code test:headless-core",
     "test:coverage": "pnpm --filter blade-code test:coverage",
     "test:watch": "pnpm --filter blade-code test:watch",
     "lint": "pnpm -r lint",
+    "lint:web": "pnpm --filter blade-web lint",
     "lint:fix": "pnpm -r lint:fix",
     "format": "biome format --write packages",
     "format:check": "biome format packages",
     "check": "biome check packages",
     "check:fix": "biome check --write packages",
     "type-check": "pnpm -r type-check",
+    "type-check:web": "pnpm --filter blade-web type-check",
     "clean": "pnpm -r exec rm -rf dist node_modules/.cache coverage",
     "clean:all": "rm -rf node_modules packages/*/node_modules pnpm-lock.yaml",
     "preflight": "pnpm clean && pnpm install && pnpm format && pnpm lint && pnpm build && pnpm type-check && pnpm test:all",
@@ -60,5 +64,6 @@
     "@biomejs/biome": "^2.2.4",
     "knip": "^5.80.0",
     "typescript": "^5.9.2"
-  }
+  },
+  "packageManager": "pnpm@10.5.2+sha512.da9dc28cd3ff40d0592188235ab25d3202add8a207afbedc682220e4a0029ffbff4562102b9e6e46b4e3f9e8bd53e6d05de48544b0c57d4b0179e22c76d1199b"
 }

@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "pnpm -C .. exec vitest run --config web/vitest.config.ts",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "lint": "pnpm -C .. exec biome lint web/src web/tests web/vitest.config.ts"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.8",
