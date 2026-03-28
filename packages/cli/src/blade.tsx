@@ -44,11 +44,6 @@ export async function main() {
   // 但允许在容器/沙箱/CI 等天然 root 环境中运行
   if (process.getuid && process.getuid() === 0) {
     const isSudo = !!process.env.SUDO_USER;
-    const isContainer =
-      !!process.env.container ||
-      !!process.env.DOCKER_CONTAINER ||
-      !!process.env.KUBERNETES_SERVICE_HOST;
-    const isCI = !!process.env.CI;
     const isAllowRoot = !!process.env.BLADE_ALLOW_ROOT;
 
     // 只有通过 sudo 提权运行时才阻止，天然 root 环境放行

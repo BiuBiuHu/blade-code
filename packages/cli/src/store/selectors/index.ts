@@ -153,26 +153,24 @@ export const useCurrentModelId = () =>
   useBladeStore((state) => state.config.config?.currentModelId);
 
 /**
- * 派生选择器：当前主题对象
+ * 派生选择器：当前主题对象（纯读取，无副作用）
  * 订阅 Store 中的主题名称变化，并返回完整的 Theme 对象
  *
- * 内部自动同步 themeManager（如果名称不一致）
+ * 注意：themeManager 的同步由 useThemeSync hook 在 App 层统一处理，
+ * 此处只做纯读取，避免每个使用 useTheme 的组件在渲染时触发副作用。
  */
 export const useTheme = () =>
   useBladeStore((state) => {
-    const themeName = state.config.config?.theme ?? 'default';
-
-    // 确保 themeManager 与 Store 同步
-    if (themeManager.getCurrentThemeName() !== themeName) {
-      try {
-        themeManager.setTheme(themeName);
-      } catch {
-        // 主题不存在，保持当前主题
-      }
-    }
-
+    // 纯读取，不再在选择器中调用 themeManager.setTheme()
     return themeManager.getTheme();
   });
+
+/**
+ * 获取当前 Store 中配置的主题名称
+ * 用于 useThemeSync hook 对比和同步
+ */
+export const useThemeName = () =>
+  useBladeStore((state) => state.config.config?.theme ?? 'default');
 
 // ==================== Focus 选择器 ====================
 

@@ -36,7 +36,7 @@ vi.mock('../../../../src/agent/Agent.js', () => ({
 vi.mock('../../../../src/server/bus.js', () => ({
   Bus: {
     publish: vi.fn(),
-    subscribe: vi.fn(() => () => {}),
+    subscribe: vi.fn(() => () => { /* noop */ }),
   },
 }));
 
@@ -44,7 +44,7 @@ vi.mock('../../../../src/services/SessionService.js', () => ({
   SessionService: {
     listSessions: vi.fn(async () => []),
     loadSession: vi.fn(async () => []),
-    deleteSession: vi.fn(async () => {}),
+    deleteSession: vi.fn(async () => { /* noop */ }),
   },
 }));
 

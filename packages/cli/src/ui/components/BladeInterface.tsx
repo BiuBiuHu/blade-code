@@ -21,6 +21,7 @@ import {
     usePermissionMode,
     useSessionActions,
     useSessionSelectorData,
+    useThemeName,
 } from '../../store/selectors/index.js';
 import { FocusId } from '../../store/types.js';
 import { configActions, getMessages } from '../../store/vanilla.js';
@@ -50,6 +51,7 @@ import { SessionSelector } from './SessionSelector.js';
 import { SkillsManager } from './SkillsManager.js';
 import { SpecStatusPanel } from './SpecStatusPanel.js';
 import { SubagentProgress } from './SubagentProgress.js';
+import { themeManager } from '../themes/ThemeManager.js';
 import { ThemeSelector } from './ThemeSelector.js';
 
 // 创建 BladeInterface 专用 Logger
@@ -105,6 +107,19 @@ export const BladeInterface: React.FC<BladeInterfaceProps> = ({
 
   // 是否正在处理
   const isProcessing = useIsProcessing();
+
+  // 主题同步：统一在此处将 Store 中的主题名同步到 themeManager
+  // 避免在每个 useTheme 选择器中触发副作用
+  const themeName = useThemeName();
+  useEffect(() => {
+    if (themeManager.getCurrentThemeName() !== themeName) {
+      try {
+        themeManager.setTheme(themeName);
+      } catch {
+        // 主题不存在，保持当前主题
+      }
+    }
+  }, [themeName]);
 
   const { exit } = useApp();
 

@@ -23,6 +23,20 @@ import type {
 
 const STREAMING_LINE_BUFFER_LIMIT = 2000;
 
+// ==================== 流式 chunks 模块级缓冲 ====================
+// 将 chunks 累积移出 Zustand store，避免每次 delta 都展开数组触发状态更新开销
+// 仅在 finalizeStreamingMessage 时读取
+let streamingChunksBuffer: string[] = [];
+
+/**
+ * 获取并清空流式 chunks 缓冲区（供 finalize 使用）
+ */
+export function drainStreamingChunksBuffer(): string[] {
+  const chunks = streamingChunksBuffer;
+  streamingChunksBuffer = [];
+  return chunks;
+}
+
 /**
  * 初始 Token 使用量
  */
@@ -360,6 +374,8 @@ export const createSessionSlice: StateCreator<BladeStore, [], [], SessionSlice> 
         content: '', // 空内容，后续增量填充
         timestamp: Date.now(),
       };
+      // 清空模块级 chunks 缓冲区
+      streamingChunksBuffer = [];
       set((state) => ({
         session: {
           ...state.session,
@@ -390,11 +406,14 @@ export const createSessionSlice: StateCreator<BladeStore, [], [], SessionSlice> 
     appendAssistantContent: (delta: string) => {
       const streamingId = get().session.currentStreamingMessageId;
       const nextStreamingId = streamingId ?? `assistant-${Date.now()}-${Math.random()}`;
+
+      // chunks 累积在模块级缓冲区，不写入 store（减少数组展开开销）
+      streamingChunksBuffer.push(delta);
+
       set((state) => {
         const normalizeLine = (line: string) =>
           line.endsWith('\r') ? line.slice(0, -1) : line;
 
-        const currentChunks = streamingId ? state.session.currentStreamingChunks : [];
         const currentLines = streamingId ? state.session.currentStreamingLines : [];
         const currentTail = streamingId ? state.session.currentStreamingTail : '';
         const currentLineCount = streamingId
@@ -406,7 +425,6 @@ export const createSessionSlice: StateCreator<BladeStore, [], [], SessionSlice> 
         const parts = combined.split('\n');
         const completedParts = parts.slice(0, -1).map(normalizeLine);
         const nextTail = normalizeLine(parts[parts.length - 1] ?? '');
-        const nextChunks = [...currentChunks, delta];
         let nextLines = currentLines;
         if (completedParts.length > 0) {
           nextLines = [...currentLines, ...completedParts];
@@ -420,7 +438,6 @@ export const createSessionSlice: StateCreator<BladeStore, [], [], SessionSlice> 
           session: {
             ...state.session,
             currentStreamingMessageId: nextStreamingId,
-            currentStreamingChunks: nextChunks,
             currentStreamingLines: nextLines,
             currentStreamingTail: nextTail,
             currentStreamingLineCount: currentLineCount + completedParts.length,
@@ -440,9 +457,11 @@ export const createSessionSlice: StateCreator<BladeStore, [], [], SessionSlice> 
      * @param extraThinking 可选的额外 thinking 内容（缓冲区剩余）
      */
     finalizeStreamingMessage: (extraContent?: string, extraThinking?: string) => {
+      // 从模块级缓冲区读取 chunks 并清空
+      const chunks = drainStreamingChunksBuffer();
       set((state) => {
         const streamingId = state.session.currentStreamingMessageId;
-        const baseContent = state.session.currentStreamingChunks.join('');
+        const baseContent = chunks.join('');
         const streamingContent = baseContent + (extraContent || '');
         const thinkingContent =
           (state.session.currentThinkingContent || '') + (extraThinking || '');

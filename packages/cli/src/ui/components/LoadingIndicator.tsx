@@ -70,7 +70,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = React.memo(
       paused
     );
 
-    // 动画效果：每 80ms 切换一帧
+    // 动画效果：每 150ms 切换一帧（降低频率减少 React 重渲染）
     // 当 paused=true 时暂停动画，避免被遮挡时仍触发重渲染
     useEffect(() => {
       if (!visible || paused) {
@@ -80,7 +80,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = React.memo(
 
       const timer = setInterval(() => {
         setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length);
-      }, 80);
+      }, 150);
 
       return () => clearInterval(timer);
     }, [visible, paused]);

@@ -20,6 +20,41 @@ import { MaxSizedBox, MINIMUM_MAX_HEIGHT } from './MaxSizedBox.js';
 // 创建 lowlight 实例
 const lowlight = createLowlight(common);
 
+// ==================== HAST 结果 LRU 缓存 ====================
+// 缓存 lowlight 的 HAST 解析结果，避免重复解析相同代码行
+const HIGHLIGHT_CACHE_CAPACITY = 200;
+const highlightCache = new Map<string, unknown>(); // key → HAST root node
+
+function getCachedHighlight(
+  line: string,
+  language: string | undefined
+): unknown | undefined {
+  const key = `${language ?? '__auto__'}:${line}`;
+  const cached = highlightCache.get(key);
+  if (cached !== undefined) {
+    // LRU: 移到末尾
+    highlightCache.delete(key);
+    highlightCache.set(key, cached);
+  }
+  return cached;
+}
+
+function setCachedHighlight(
+  line: string,
+  language: string | undefined,
+  result: unknown
+): void {
+  const key = `${language ?? '__auto__'}:${line}`;
+  if (highlightCache.size >= HIGHLIGHT_CACHE_CAPACITY) {
+    // 删除最旧的条目（Map 的第一个 key）
+    const firstKey = highlightCache.keys().next().value;
+    if (firstKey !== undefined) {
+      highlightCache.delete(firstKey);
+    }
+  }
+  highlightCache.set(key, result);
+}
+
 interface CodeHighlighterProps {
   content: string;
   language?: string;
@@ -124,27 +159,30 @@ function highlightLine(
   const colors = syntaxColors || themeManager.getTheme().colors.syntax;
 
   try {
-    if (!language || !lowlight.registered(language)) {
-      // 尝试自动检测语言
-      const result = lowlight.highlightAuto(line);
-      if (!result.children || result.children.length === 0) {
-        return (
-          <Text color={colors.default} wrap="wrap">
-            {line}
-          </Text>
-        );
-      }
-      return renderHastNode(result, colors);
+    // 查询 HAST 缓存
+    const cached = getCachedHighlight(line, language);
+    if (cached) {
+      return renderHastNode(cached, colors);
     }
 
-    const result = lowlight.highlight(language, line);
-    if (!result.children || result.children.length === 0) {
+    let result: unknown;
+    if (!language || !lowlight.registered(language)) {
+      result = lowlight.highlightAuto(line);
+    } else {
+      result = lowlight.highlight(language, line);
+    }
+
+    const root = result as HastRootNode;
+    if (!root.children || root.children.length === 0) {
       return (
         <Text color={colors.default} wrap="wrap">
           {line}
         </Text>
       );
     }
+
+    // 缓存 HAST 结果
+    setCachedHighlight(line, language, result);
     return renderHastNode(result, colors);
   } catch (_error) {
     return (

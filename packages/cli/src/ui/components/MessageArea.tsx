@@ -21,6 +21,13 @@ import { useTerminalHeight } from '../hooks/useTerminalHeight.js';
 import { useTerminalWidth } from '../hooks/useTerminalWidth.js';
 import { getMarkdownBlocksSnapshot, getMarkdownTailSnapshot } from '../utils/markdownIncremental.js';
 import type { ParsedBlock } from '../utils/markdownParser.js';
+import {
+  activateRawRenderer,
+  clearRawRenderer,
+  isRawRendererActive,
+  renderTail,
+  updateRawRendererSize,
+} from '../utils/rawStreamRenderer.js';
 import { CollapsedHistorySummary } from './CollapsedHistorySummary.js';
 import { Header } from './Header.js';
 import { MessageRenderer } from './MessageRenderer.js';
@@ -74,6 +81,9 @@ export const MessageArea: React.FC = React.memo(() => {
 
   useEffect(() => {
     if (prevHistoryExpandedRef.current !== historyExpanded) {
+      if (isRawRendererActive()) {
+        clearRawRenderer();
+      }
       if (stdout) {
         stdout.write(ansiEscapes.clearTerminal);
       }
@@ -95,24 +105,27 @@ export const MessageArea: React.FC = React.memo(() => {
       return;
     }
     finalizingCleanupRef.current = finalizingStreamingMessageId;
-    const timer = setTimeout(() => {
-      if (stdout) {
-        stdout.write(ansiEscapes.clearTerminal);
-      }
-      streamingToolMessageIdsRef.current = new Set();
-      streamingToolBaselineIdsRef.current = new Set(
-        historyMessages.filter((msg) => msg.role === 'tool').map((msg) => msg.id)
-      );
-      streamingMessageIdRef.current = null;
-      streamingBlockCountRef.current = 0;
-      streamingChunkIndexRef.current = 0;
-      streamingPendingEmptyBlocksRef.current = [];
-      setStreamingStaticItems([]);
-      setStreamedAssistantMessageIds(new Set());
-      sessionActions.incrementClearCount();
-      sessionActions.clearFinalizingStreamingMessageId();
-    }, 50);
-    return () => clearTimeout(timer);
+    // 先清除 raw renderer（在 eraseScreen 之前，避免残留）
+    if (isRawRendererActive()) {
+      clearRawRenderer();
+    }
+    // 同步执行清理，不再延迟 50ms（消除闪屏的关键）
+    // 使用 eraseScreen 而非 clearTerminal，避免清除滚回历史导致更大的视觉闪烁
+    if (stdout) {
+      stdout.write(ansiEscapes.eraseScreen);
+    }
+    streamingToolMessageIdsRef.current = new Set();
+    streamingToolBaselineIdsRef.current = new Set(
+      historyMessages.filter((msg) => msg.role === 'tool').map((msg) => msg.id)
+    );
+    streamingMessageIdRef.current = null;
+    streamingBlockCountRef.current = 0;
+    streamingChunkIndexRef.current = 0;
+    streamingPendingEmptyBlocksRef.current = [];
+    setStreamingStaticItems([]);
+    setStreamedAssistantMessageIds(new Set());
+    sessionActions.incrementClearCount();
+    sessionActions.clearFinalizingStreamingMessageId();
   }, [
     finalizingStreamingMessageId,
     isProcessing,
@@ -125,6 +138,10 @@ export const MessageArea: React.FC = React.memo(() => {
     currentStreamingMessageId ?? finalizingStreamingMessageId;
 
   useEffect(() => {
+    // clearCount 变化时（resize/clear 等），清理 raw renderer
+    if (isRawRendererActive()) {
+      clearRawRenderer();
+    }
     streamingMessageIdRef.current = null;
     streamingBlockCountRef.current = 0;
     streamingChunkIndexRef.current = 0;
@@ -194,6 +211,11 @@ export const MessageArea: React.FC = React.memo(() => {
     streamingChunkIndexRef.current += 1;
     const hidePrefix = chunkIndex > 0;
 
+    // 新 blocks 添加到 Static 前，清除 raw tail（Static 输出会改变光标位置）
+    if (isRawRendererActive()) {
+      clearRawRenderer();
+    }
+
     setStreamedAssistantMessageIds((prev) => {
       if (!activeStreamingMessageId || prev.has(activeStreamingMessageId)) {
         return prev;
@@ -242,6 +264,10 @@ export const MessageArea: React.FC = React.memo(() => {
     if (newToolMessages.length === 0) {
       return;
     }
+    // tool 消息添加到 Static 前，清除 raw tail
+    if (isRawRendererActive()) {
+      clearRawRenderer();
+    }
     for (const msg of newToolMessages) {
       streamingToolMessageIdsRef.current.add(msg.id);
     }
@@ -262,33 +288,50 @@ export const MessageArea: React.FC = React.memo(() => {
     ]);
   }, [activeStreamingMessageId, historyMessages, terminalWidth]);
 
-  const streamingTailViewport = useMemo(() => {
+  // Raw tail 渲染：绕过 React/Ink，直接用 stdout.write 输出流式 tail
+  // 这是性能优化的核心 — 最高频更新的 tail 不再触发 React reconciliation
+  useEffect(() => {
     if (!activeStreamingMessageId) {
-      return null;
+      if (isRawRendererActive()) {
+        clearRawRenderer();
+      }
+      return;
     }
+
+    // 激活 raw renderer（如果尚未激活）
+    if (!isRawRendererActive()) {
+      activateRawRenderer(terminalWidth, terminalHeight);
+    } else {
+      updateRawRendererSize(terminalWidth, terminalHeight);
+    }
+
     const tailSnapshot = getMarkdownTailSnapshot(activeStreamingMessageId);
     if (!tailSnapshot || tailSnapshot.lines.length === 0) {
-      return null;
+      return;
     }
 
     const RESERVED_LINES = 8;
     const maxDisplayLines = Math.max(1, terminalHeight - RESERVED_LINES);
     const hiddenLines = Math.max(0, tailSnapshot.lines.length - maxDisplayLines);
     const visibleLines = tailSnapshot.lines.slice(-maxDisplayLines);
-    return { visibleLines, hiddenLines, mode: tailSnapshot.mode };
-  }, [activeStreamingMessageId, currentStreamingBuffer.version, terminalHeight]);
+    const hasBlocks = (getMarkdownBlocksSnapshot(activeStreamingMessageId)?.length ?? 0) > 0;
 
-  const streamingHasBlocks = useMemo(() => {
-    if (!activeStreamingMessageId) {
-      return false;
+    renderTail(visibleLines, hiddenLines, tailSnapshot.mode, hasBlocks);
+  }, [activeStreamingMessageId, currentStreamingBuffer.version, terminalHeight, terminalWidth]);
+
+  // 在 finalization 清理时也清除 raw renderer
+  useEffect(() => {
+    if (!activeStreamingMessageId && isRawRendererActive()) {
+      clearRawRenderer();
     }
-    const blocksSnapshot = getMarkdownBlocksSnapshot(activeStreamingMessageId);
-    return (blocksSnapshot?.length ?? 0) > 0;
-  }, [activeStreamingMessageId, currentStreamingBuffer.version]);
+  }, [activeStreamingMessageId]);
 
   useEffect(() => {
     if (collapsePointState === null && historyMessages.length > expandedMessageCount) {
       setCollapsePointState(historyMessages.length);
+      if (isRawRendererActive()) {
+        clearRawRenderer();
+      }
       if (stdout) {
         stdout.write(ansiEscapes.clearTerminal);
       }
@@ -389,20 +432,8 @@ export const MessageArea: React.FC = React.memo(() => {
           </Static>
         )}
 
-        {streamingTailViewport && (
-          <Box flexDirection="column">
-            <MessageRenderer
-              content=""
-              role="assistant"
-              terminalWidth={terminalWidth}
-              isPending={true}
-              hidePrefix={streamingHasBlocks}
-              streamingLines={streamingTailViewport.visibleLines}
-              streamingHiddenLines={streamingTailViewport.hiddenLines}
-              streamingMode={streamingTailViewport.mode}
-            />
-          </Box>
-        )}
+        {/* tail viewport 已由 rawStreamRenderer 直接通过 stdout.write 渲染，
+            不再通过 React/Ink 渲染，避免高频 re-render */}
 
         {showTodoPanel && hasActiveTodos && (
           <Box marginTop={1}>

@@ -65,8 +65,8 @@ export class AutoMemoryManager {
       }
 
       return result || null;
-    } catch (err: any) {
-      if (err.code === 'ENOENT') return null;
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw err;
     }
   }
@@ -81,8 +81,8 @@ export class AutoMemoryManager {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       return content || null;
-    } catch (err: any) {
-      if (err.code === 'ENOENT') return null;
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw err;
     }
   }
